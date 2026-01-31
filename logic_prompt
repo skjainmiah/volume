@@ -1,0 +1,365 @@
+🧠🔥 CORE INTELLIGENCE MASTER PROMPT
+Autonomous Options Trading Intelligence (Core Logic)
+ROLE
+
+You are a senior quantitative trading engineer and AI systems designer.
+
+Your task is to implement the CORE INTELLIGENCE LOGIC of an autonomous options trading system using Groww API, designed to:
+
+Scan markets automatically
+
+Track stocks intelligently
+
+Trade ONLY when conditions are mature
+
+Avoid overtrading
+
+Explain every decision
+
+Protect capital at all times
+
+This logic is the heart of the system.
+UI, charts, and execution depend on this.
+
+HIGH-LEVEL INTELLIGENCE PHILOSOPHY
+
+The system does NOT predict.
+The system does NOT chase moves.
+The system waits for confirmation after exhaustion.
+
+The intelligence is based on market behavior, not indicators alone.
+
+END-TO-END INTELLIGENCE FLOW
+FETCH STOCKS
+↓
+FILTER (OPTIONS AVAILABLE)
+↓
+SCAN FOR SHOCK CANDLES (EOD)
+↓
+ADD TO RADAR
+↓
+TRACK DAILY (DIGESTION)
+↓
+WAIT FOR ACCEPTANCE
+↓
+DECIDE (WITH LLM VALIDATION)
+↓
+TRADE OR WAIT
+↓
+EXIT SAFELY
+↓
+LEARN & ADAPT
+
+🔁 FETCH & SCAN LOGIC (VERY IMPORTANT)
+Fetch Button (Manual + Scheduled)
+
+Implement a Fetch & Scan button that:
+
+Uses Groww API to:
+
+Fetch all NSE stocks
+
+Filter stocks that have options enabled
+
+Fetch EOD data (after 6:00 PM) for:
+
+Today’s candle
+
+Last 20 days volume
+
+This button can be:
+
+Manually clicked by user
+
+Automatically triggered via scheduler (daily after market close)
+
+SHOCK CANDLE DETECTION (ENTRY INTO RADAR)
+
+A stock is added to RADAR if:
+
+Today’s candle is:
+
+Large RED or GREEN candle
+
+AND volume is:
+
+≥ 4 × 20-day average volume
+
+AND candle body is significant (not doji)
+
+Important Rule
+
+❌ DO NOT TRADE TODAY
+
+This candle represents exhaustion or initiative, not entry.
+
+Store:
+
+Shock date
+
+Direction
+
+High
+
+Low
+
+Volume multiple
+
+🛰️ RADAR & TRACKING LOGIC
+
+Once a stock is in RADAR:
+
+Track it daily
+
+No fixed number of days
+
+Can be:
+
+1 day
+
+2 days
+
+4 days
+
+Or discarded
+
+What we track daily
+
+Candle size (shrinking or expanding)
+
+Volume trend (decreasing is good)
+
+Price relative to:
+
+Shock high
+
+Shock low
+
+Trend context
+
+This phase is called DIGESTION.
+
+🧩 SUPPORTIVE INDICATORS (SECONDARY, NOT PRIMARY)
+
+Indicators are used only for confirmation, never for triggering trades.
+
+Allowed supportive indicators
+
+Trend (SMA / structure-based)
+
+Support & resistance (shock high/low)
+
+Volume average line
+
+Distance from key levels
+
+FII/DII flow (context only)
+
+News risk (binary)
+
+Indicators can:
+
+✔ Increase confidence
+✔ Decrease confidence
+
+Indicators cannot:
+
+❌ Force a trade
+❌ Override price action
+❌ Override safety rules
+
+🟢 ACCEPTANCE / REVERSAL LOGIC (TRADE SETUP)
+
+A stock becomes trade-eligible only when:
+
+Digestion is visible:
+
+Smaller candles
+
+Reduced volume
+
+AND a new candle appears showing acceptance:
+
+Green candle after red exhaustion → CALL bias
+
+Red candle after green exhaustion → PUT bias
+
+Candle characteristics:
+
+Clean body
+
+No strong rejection wicks
+
+Close near high (CALL) or low (PUT)
+
+Price respects shock levels:
+
+Above shock support for CALL
+
+Below shock resistance for PUT
+
+⏰ DECISION TIMING (VERY IMPORTANT)
+
+Trade decision is evaluated:
+
+Near end of day
+
+Configurable window (example: 3:00–3:15 PM)
+
+Or EOD close logic if configured
+
+Outside this window:
+❌ No trades allowed
+
+🧠 LLM ROLE (STRICTLY BOUNDED)
+Why LLM is used
+
+Markets don’t reverse in fixed days.
+Patterns vary.
+
+LLM helps answer:
+
+“Is this a genuine acceptance or just noise?”
+
+LLM is used ONLY when:
+
+Score is near threshold
+
+Pattern duration is ambiguous
+
+Structure is unclear
+
+LLM input
+
+Structured features only
+
+No raw charts
+
+No free-form questions
+
+LLM output
+{
+  "decision": "BUY_CALL | BUY_PUT | WAIT",
+  "confidence": 0.0-1.0,
+  "reason": "plain English explanation"
+}
+
+LLM CANNOT
+
+❌ Place orders
+❌ Change stop loss
+❌ Increase risk
+❌ Override safety
+
+⚖️ FINAL DECISION LOGIC
+
+A trade is taken ONLY if:
+
+State = ACCEPTANCE_READY
+
+Score ≥ threshold
+
+Safety Governor allows trade
+
+LLM (if used) approves OR score is clearly strong
+
+Otherwise → WAIT
+
+WAIT is a valid outcome.
+
+💼 OPTION SELECTION (AUTOMATED)
+
+Once trade is approved:
+
+Use Groww API to fetch options chain
+
+Select:
+
+ATM or 1-step ITM
+
+Nearest weekly expiry (not expiry day)
+
+Ensure:
+
+Good liquidity
+
+Acceptable bid–ask spread
+
+🛡️ STOP LOSS & EXIT LOGIC (NON-NEGOTIABLE)
+
+Every trade must have:
+
+Hard stop loss
+
+Trailing stop loss (only in profit)
+
+Next-day exit rule
+
+❌ No averaging
+❌ No widening SL
+
+🚨 KILL SWITCH (CRITICAL)
+What is Kill Switch?
+
+A global emergency stop.
+
+What it does:
+
+Immediately stops new trades
+
+Optionally exits open trades
+
+Overrides all intelligence & learning
+
+When it is used:
+
+API instability
+
+Unexpected behavior
+
+Market chaos
+
+Human emergency
+
+Who controls it:
+
+UI
+
+Safety Governor
+
+Automated triggers
+
+Kill switch exists because:
+
+Capital safety > automation
+
+🔁 LEARNING & ADAPTATION (SAFE)
+
+The system learns:
+
+Which feature combinations worked
+
+Which failed
+
+The system does NOT learn:
+
+Rules
+
+SL logic
+
+Entry timing
+
+State transitions
+
+Learning only adjusts weights, slowly and safely.
+
+🧠 FINAL INTELLIGENCE PRINCIPLE
+
+The system is not fast.
+The system is not aggressive.
+The system is patient, selective, and defensive.
+
+Most days → NO TRADE
+Few days → GOOD TRADE
+
+That is success.
