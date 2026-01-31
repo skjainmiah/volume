@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, Eye, Search } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, Search, Database } from 'lucide-react';
 import clsx from 'clsx';
 
 interface RadarItem {
@@ -19,6 +19,7 @@ export default function Radar() {
   const [radarItems, setRadarItems] = useState<RadarItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const [isFetchingStocks, setIsFetchingStocks] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -50,6 +51,38 @@ export default function Radar() {
       console.error('Error loading radar data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStocksWithOptions = async () => {
+    setIsFetchingStocks(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/groww-data-fetcher`;
+      const headers = {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: 'fetch_stocks_with_options',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`Stocks fetched successfully!\n\n${result.message}`);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error fetching stocks:', error);
+      alert('Error fetching stocks. Check console for details.');
+    } finally {
+      setIsFetchingStocks(false);
     }
   };
 
@@ -101,14 +134,34 @@ export default function Radar() {
           <h1 className="text-3xl font-bold text-text-primary mb-2">Radar</h1>
           <p className="text-text-secondary">Stocks being tracked by the system</p>
         </div>
-        <button
-          onClick={runScanEngine}
-          disabled={isScanning}
-          className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Search className="w-5 h-5" />
-          {isScanning ? 'Scanning...' : 'Fetch & Scan'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchStocksWithOptions}
+            disabled={isFetchingStocks}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-3 rounded-lg transition-colors font-medium',
+              isFetchingStocks
+                ? 'bg-surface-light text-text-muted cursor-not-allowed'
+                : 'bg-surface-lighter text-text-primary hover:bg-surface-light border border-surface-light'
+            )}
+          >
+            <Database className="w-5 h-5" />
+            {isFetchingStocks ? 'Fetching...' : 'Fetch Stocks'}
+          </button>
+          <button
+            onClick={runScanEngine}
+            disabled={isScanning}
+            className={clsx(
+              'flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium',
+              isScanning
+                ? 'bg-primary/50 text-white cursor-not-allowed'
+                : 'bg-primary hover:bg-primary-dark text-white'
+            )}
+          >
+            <Search className="w-5 h-5" />
+            {isScanning ? 'Scanning...' : 'Scan for Shocks'}
+          </button>
+        </div>
       </div>
 
       {radarItems.length === 0 ? (

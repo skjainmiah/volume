@@ -179,17 +179,16 @@ async function detectShockCandle(supabase: any, symbol: string): Promise<any> {
 
 async function fetchHistoricalCandles(supabase: any, symbol: string, days: number): Promise<any[]> {
   try {
-    const { data: cachedData } = await supabase
-      .from('market_data_cache')
-      .select('data')
-      .eq('symbol', symbol)
-      .eq('data_type', 'CANDLE')
-      .gt('expires_at', new Date().toISOString())
-      .order('fetched_at', { ascending: false })
+    const { data: candles } = await supabase
+      .from('candle_data')
+      .select('*')
+      .eq('stock_symbol', symbol)
+      .eq('timeframe', '1day')
+      .order('timestamp', { ascending: false })
       .limit(days);
 
-    if (cachedData && cachedData.length > 0) {
-      return cachedData.map((d: any) => d.data);
+    if (candles && candles.length >= days) {
+      return candles.reverse();
     }
 
     return generateMockCandles(symbol, days);

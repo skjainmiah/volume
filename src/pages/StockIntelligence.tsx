@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
-import PriceChart from '../components/PriceChart';
+import CandlestickChart from '../components/CandlestickChart';
 
 interface RadarDetails {
   stock_symbol: string;
@@ -17,23 +17,34 @@ interface RadarDetails {
   shock_candle_low: number;
 }
 
-interface ChartData {
-  date: string;
-  price: number;
+interface CandleData {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
   volume: number;
 }
 
 export default function StockIntelligence() {
   const { radarId } = useParams<{ radarId: string }>();
   const [radarData, setRadarData] = useState<RadarDetails | null>(null);
-  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [chartData, setChartData] = useState<CandleData[]>([]);
+  const [timeframe, setTimeframe] = useState<'10min' | '1hour' | '1day'>('1day');
   const [loading, setLoading] = useState(true);
+  const [fetchingCandles, setFetchingCandles] = useState(false);
 
   useEffect(() => {
     if (radarId) {
       loadRadarDetails();
     }
   }, [radarId]);
+
+  useEffect(() => {
+    if (radarData) {
+      loadCandles();
+    }
+  }, [radarData, timeframe]);
 
   const loadRadarDetails = async () => {
     try {
@@ -58,37 +69,68 @@ export default function StockIntelligence() {
           shock_candle_high: radarItem.shock_candle_high,
           shock_candle_low: radarItem.shock_candle_low,
         });
-
-        const startDate = new Date(radarItem.shock_date);
-        startDate.setDate(startDate.getDate() - 30);
-        const endDate = new Date();
-
-        const mockChartData: ChartData[] = [];
-        const currentDate = new Date(startDate);
-        const basePrice = radarItem.shock_candle_low;
-
-        while (currentDate <= endDate) {
-          if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
-            const daysFromStart = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-            const volatility = Math.sin(daysFromStart / 5) * 10;
-            const trend = daysFromStart * 0.5;
-            const randomNoise = (Math.random() - 0.5) * 20;
-
-            mockChartData.push({
-              date: currentDate.toISOString().split('T')[0],
-              price: basePrice + volatility + trend + randomNoise,
-              volume: Math.floor(Math.random() * 1000000) + 500000,
-            });
-          }
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-
-        setChartData(mockChartData);
       }
     } catch (error) {
       console.error('Error loading radar details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCandles = async () => {
+    if (!radarData) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('candle_data')
+        .select('*')
+        .eq('stock_symbol', radarData.stock_symbol)
+        .eq('timeframe', timeframe)
+        .order('timestamp', { ascending: true })
+        .limit(timeframe === '10min' ? 100 : timeframe === '1hour' ? 50 : 30);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setChartData(data as CandleData[]);
+      } else {
+        setChartData([]);
+      }
+    } catch (error) {
+      console.error('Error loading candles:', error);
+    }
+  };
+
+  const fetchCandlesFromAPI = async () => {
+    if (!radarData) return;
+
+    setFetchingCandles(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/groww-data-fetcher`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'fetch_candles',
+            symbol: radarData.stock_symbol,
+            timeframe: timeframe,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        await loadCandles();
+      }
+    } catch (error) {
+      console.error('Error fetching candles:', error);
+    } finally {
+      setFetchingCandles(false);
     }
   };
 
@@ -126,13 +168,30 @@ export default function StockIntelligence() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <div className="bg-surface rounded-lg p-6 border border-surface-light">
-            <h2 className="text-xl font-semibold text-text-primary mb-4">Price Chart</h2>
-            <div className="h-96">
-              <PriceChart
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-text-primary">CASH Market Chart</h2>
+              <button
+                onClick={fetchCandlesFromAPI}
+                disabled={fetchingCandles}
+                className={clsx(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors',
+                  fetchingCandles
+                    ? 'bg-surface-light text-text-muted cursor-not-allowed'
+                    : 'bg-primary text-white hover:bg-primary/90'
+                )}
+              >
+                <RefreshCw className={clsx('w-4 h-4', fetchingCandles && 'animate-spin')} />
+                {fetchingCandles ? 'Fetching...' : 'Fetch Candles'}
+              </button>
+            </div>
+            <div className="text-xs text-text-secondary mb-4 bg-surface-light p-3 rounded border-l-4 border-primary">
+              📊 Analysis on CASH market • Execution in OPTIONS • Never trade equity shares
+            </div>
+            <div className="h-[500px]">
+              <CandlestickChart
                 data={chartData}
-                shockDate={radarData.shock_date}
-                shockHigh={radarData.shock_candle_high}
-                shockLow={radarData.shock_candle_low}
+                timeframe={timeframe}
+                onTimeframeChange={setTimeframe}
               />
             </div>
           </div>

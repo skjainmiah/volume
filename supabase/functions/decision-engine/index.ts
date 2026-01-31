@@ -740,7 +740,57 @@ async function executeTrade(
   calibratedConfidence: number,
   rawConfidence: number
 ): Promise<string> {
-  const entryPrice = 100 + Math.random() * 50;
+  const optionType = features.option_type;
+
+  const { data: stockData } = await supabase
+    .from('stocks')
+    .select('last_price, has_options')
+    .eq('symbol', radar.stock_symbol)
+    .maybeSingle();
+
+  if (!stockData?.has_options) {
+    throw new Error(`${radar.stock_symbol} does not have tradable options - CANNOT EXECUTE`);
+  }
+
+  const spotPrice = stockData.last_price || 2000;
+
+  const { data: optionsChain } = await supabase
+    .from('options_chain')
+    .select('*')
+    .eq('stock_symbol', radar.stock_symbol)
+    .eq('option_type', optionType)
+    .eq('is_liquid', true)
+    .gte('expiry_date', new Date().toISOString().split('T')[0])
+    .order('expiry_date', { ascending: true });
+
+  if (!optionsChain || optionsChain.length === 0) {
+    throw new Error(`No liquid ${optionType} options available for ${radar.stock_symbol}`);
+  }
+
+  const nearestExpiry = optionsChain[0].expiry_date;
+  const expiryOptions = optionsChain.filter((o: any) => o.expiry_date === nearestExpiry);
+
+  let selectedOption = null;
+  let minDistance = Infinity;
+
+  for (const option of expiryOptions) {
+    const distance = Math.abs(option.strike_price - spotPrice);
+    if (distance < minDistance) {
+      minDistance = distance;
+      selectedOption = option;
+    }
+  }
+
+  if (!selectedOption) {
+    throw new Error(`Could not select appropriate option strike for ${radar.stock_symbol}`);
+  }
+
+  const isATM = Math.abs(selectedOption.strike_price - spotPrice) < 50;
+  const strikeType = isATM ? 'ATM' :
+    (optionType === 'CALL' && selectedOption.strike_price < spotPrice) ? 'ITM' :
+    (optionType === 'PUT' && selectedOption.strike_price > spotPrice) ? 'ITM' : 'OTM';
+
+  const entryPrice = selectedOption.ltp;
   const stopLoss = entryPrice * 0.85;
 
   const { data: tradeData } = await supabase
@@ -749,10 +799,11 @@ async function executeTrade(
       radar_id: radar.id,
       trade_mode: tradingMode,
       stock_symbol: radar.stock_symbol,
-      option_symbol: `${radar.stock_symbol}_OPTION`,
-      option_type: features.option_type,
-      strike_price: 0,
-      strike_type: 'ATM',
+      option_symbol: selectedOption.groww_symbol,
+      option_type: optionType,
+      strike_price: selectedOption.strike_price,
+      strike_type: strikeType,
+      expiry_date: selectedOption.expiry_date,
       entry_price: entryPrice,
       entry_time: new Date().toISOString(),
       lot_size: positionSize.finalLotCount,
@@ -761,6 +812,7 @@ async function executeTrade(
       calibrated_confidence: calibratedConfidence,
       raw_confidence: rawConfidence,
       llm_used: false,
+      status: 'OPEN',
     })
     .select()
     .single();
@@ -772,6 +824,19 @@ async function executeTrade(
       updated_at: new Date().toISOString(),
     })
     .eq('id', radar.id);
+
+  await supabase.from('safety_events').insert({
+    event_type: 'OPTION_TRADE_EXECUTED',
+    severity: 'INFO',
+    description: `${tradingMode}: BUY ${optionType} ${radar.stock_symbol} ${selectedOption.strike_price} @ ₹${entryPrice}`,
+    action_taken: `Lot Size: ${positionSize.finalLotCount}, Capital: ₹${positionSize.capitalUsed}`,
+    metadata: {
+      trade_id: tradeData?.id,
+      option_symbol: selectedOption.groww_symbol,
+      strike_type: strikeType,
+      expiry: selectedOption.expiry_date,
+    },
+  });
 
   return tradeData?.id || 'unknown';
 }
