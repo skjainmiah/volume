@@ -556,16 +556,132 @@ async function getCalibrationData(supabase: any, score: number): Promise<any> {
   return { factor: Math.max(0.5, Math.min(1.2, factor)) };
 }
 
-async function consultLLM(_supabase: any, _provider: any, _radar: any, _features: any, _score: number, _threshold: number): Promise<any> {
-  return {
-    provider: 'claude',
-    model: 'claude-3-sonnet',
-    promptId: 'default',
-    decision: 'WAIT',
-    confidence: 0.5,
-    rawConfidence: 0.5,
-    reasoning: 'LLM integration placeholder',
-  };
+async function consultLLM(supabase: any, provider: any, radar: any, features: any, score: number, threshold: number): Promise<any> {
+  try {
+    const { data: apiConfig } = await supabase
+      .from('system_config')
+      .select('config_value')
+      .eq('config_key', 'openai_api')
+      .maybeSingle();
+
+    const openaiKey = apiConfig?.config_value?.api_key || Deno.env.get('OPENAI_API_KEY');
+
+    if (!openaiKey) {
+      console.warn('No OpenAI API key found, returning default decision');
+      return {
+        provider: provider.provider || 'openai',
+        model: 'gpt-4',
+        promptId: 'default',
+        decision: 'WAIT',
+        confidence: 0.5,
+        rawConfidence: 0.5,
+        reasoning: 'No API key configured - defaulting to WAIT',
+      };
+    }
+
+    const prompt = `You are an expert options trading analyst. A stock has shown a ${radar.shock_direction} shock candle ${radar.days_since_shock} days ago.
+
+Stock: ${radar.stock_symbol}
+Shock Direction: ${radar.shock_direction}
+Days Since Shock: ${radar.days_since_shock}
+Current State: ${radar.current_state}
+
+Features Analysis:
+- Digestion Quality: ${features.digestion_quality.toFixed(2)}
+- Acceptance Pattern: ${features.acceptance_pattern.toFixed(2)}
+- Volume Behavior: ${features.volume_behavior.toFixed(2)}
+- Historical Probability: ${features.historical_probability.toFixed(2)}
+
+Algorithm Score: ${score.toFixed(3)} (Threshold: ${threshold})
+
+The strategy is:
+- GREEN shock → wait for acceptance (red candle after digestion) → BUY PUT
+- RED shock → wait for acceptance (green candle after digestion) → BUY CALL
+
+Based on this data, should we:
+1. EXECUTE - Take the trade now (high confidence)
+2. WAIT - Not enough confirmation yet
+
+Respond in JSON format:
+{
+  "decision": "EXECUTE" or "WAIT",
+  "confidence": 0.0 to 1.0,
+  "reasoning": "brief explanation"
+}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a conservative options trading analyst. Respond only in valid JSON format.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('OpenAI API error:', error);
+      return {
+        provider: 'openai',
+        model: 'gpt-4',
+        promptId: 'default',
+        decision: 'WAIT',
+        confidence: 0.5,
+        rawConfidence: 0.5,
+        reasoning: 'API error - defaulting to WAIT',
+      };
+    }
+
+    const result = await response.json();
+    const llmText = result.choices[0]?.message?.content || '{}';
+
+    let parsed;
+    try {
+      parsed = JSON.parse(llmText);
+    } catch {
+      const match = llmText.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        parsed = { decision: 'WAIT', confidence: 0.5, reasoning: 'Failed to parse LLM response' };
+      }
+    }
+
+    return {
+      provider: 'openai',
+      model: 'gpt-4',
+      promptId: 'default',
+      decision: parsed.decision || 'WAIT',
+      confidence: parsed.confidence || 0.5,
+      rawConfidence: parsed.confidence || 0.5,
+      reasoning: parsed.reasoning || 'No reasoning provided',
+    };
+  } catch (error: any) {
+    console.error('Error in consultLLM:', error);
+    return {
+      provider: provider.provider || 'openai',
+      model: 'gpt-4',
+      promptId: 'default',
+      decision: 'WAIT',
+      confidence: 0.5,
+      rawConfidence: 0.5,
+      reasoning: `Error: ${error.message}`,
+    };
+  }
 }
 
 function calculatePositionSize(
