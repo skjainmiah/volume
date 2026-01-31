@@ -1,13 +1,83 @@
 import { useStore } from '../store/useStore';
-import { AlertCircle, Power } from 'lucide-react';
+import { AlertCircle, Power, PowerOff } from 'lucide-react';
 import clsx from 'clsx';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function StatusBar() {
-  const { systemStatus, emergencyStop } = useStore();
+  const { systemStatus, emergencyStop, resumeTrading } = useStore();
+  const [killSwitchActive, setKillSwitchActive] = useState(false);
+  const [killSwitchReason, setKillSwitchReason] = useState('');
 
-  const handleKillSwitch = () => {
-    if (window.confirm('Are you sure you want to activate the KILL SWITCH? This will stop all trading immediately and switch to PAPER mode.')) {
-      emergencyStop();
+  useEffect(() => {
+    fetchKillSwitchState();
+
+    const subscription = supabase
+      .channel('kill_switch_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'kill_switch_state'
+      }, () => {
+        fetchKillSwitchState();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchKillSwitchState = async () => {
+    const { data } = await supabase
+      .from('kill_switch_state')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      setKillSwitchActive((data as any).is_active || false);
+      setKillSwitchReason((data as any).reason || '');
+    }
+  };
+
+  const handleKillSwitchToggle = async () => {
+    if (!killSwitchActive) {
+      if (window.confirm('⚠️ ACTIVATE KILL SWITCH?\n\nThis will immediately:\n• Stop ALL trading\n• Block new orders\n• Cancel pending executions\n\nContinue?')) {
+        await toggleKillSwitch(true, 'Manual activation via UI');
+        emergencyStop();
+      }
+    } else {
+      if (window.confirm('✅ DEACTIVATE KILL SWITCH?\n\nThis will resume normal trading operations.\n\nContinue?')) {
+        await toggleKillSwitch(false, 'Manual deactivation via UI');
+        resumeTrading();
+      }
+    }
+  };
+
+  const toggleKillSwitch = async (activate: boolean, reason: string) => {
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kill-switch-manager`;
+      const headers = {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: activate ? 'ACTIVATE' : 'DEACTIVATE',
+          activated_by: 'UI',
+          reason,
+        }),
+      });
+
+      await fetchKillSwitchState();
+    } catch (error) {
+      console.error('Error toggling kill switch:', error);
+      alert('Failed to toggle kill switch. Check console for details.');
     }
   };
 
@@ -75,13 +145,35 @@ export default function StatusBar() {
           </div>
         </div>
 
-        <button
-          onClick={handleKillSwitch}
-          className="flex items-center gap-2 px-4 py-2 bg-danger hover:bg-danger/80 text-white rounded-lg transition-colors font-medium"
-        >
-          <Power className="w-4 h-4" />
-          KILL SWITCH
-        </button>
+        <div className="flex items-center gap-3">
+          {killSwitchActive && killSwitchReason && (
+            <span className="text-xs text-danger font-medium">
+              {killSwitchReason}
+            </span>
+          )}
+          <button
+            onClick={handleKillSwitchToggle}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-medium',
+              killSwitchActive
+                ? 'bg-success hover:bg-success/80 text-white animate-pulse'
+                : 'bg-danger hover:bg-danger/80 text-white'
+            )}
+            title={killSwitchActive ? 'Trading DISABLED - Click to resume' : 'Trading ENABLED - Click to stop'}
+          >
+            {killSwitchActive ? (
+              <>
+                <PowerOff className="w-4 h-4" />
+                TRADING OFF
+              </>
+            ) : (
+              <>
+                <Power className="w-4 h-4" />
+                TRADING ON
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

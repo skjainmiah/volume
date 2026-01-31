@@ -27,6 +27,7 @@ interface AppState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   emergencyStop: () => void;
+  resumeTrading: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -55,6 +56,14 @@ export const useStore = create<AppState>((set) => ({
         ...state.systemStatus,
         systemState: 'EMERGENCY_STOP',
         tradingMode: 'PAPER',
+      }
+    })),
+
+  resumeTrading: () =>
+    set((state) => ({
+      systemStatus: {
+        ...state.systemStatus,
+        systemState: 'RUNNING',
       }
     })),
 }));

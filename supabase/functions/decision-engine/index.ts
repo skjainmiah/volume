@@ -20,6 +20,25 @@ Deno.serve(async (req: Request) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    const killSwitchCheck = await checkKillSwitch(supabase);
+    if (killSwitchCheck.active) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: '🚨 KILL SWITCH ACTIVE - Trading disabled',
+          reason: killSwitchCheck.reason,
+          timestamp: new Date().toISOString(),
+        }),
+        {
+          status: 403,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+
     const windowCheck = await checkDecisionWindow(supabase);
     if (!windowCheck.allowed) {
       return new Response(
@@ -354,20 +373,27 @@ async function checkTradeAllowed(supabase: any, systemState: any, riskLimits: an
   const currentLoss = Math.abs(Math.min(systemState.todayPnL, 0));
 
   if (currentLoss >= maxLossAllowed) {
+    await autoTriggerKillSwitch(
+      supabase,
+      'DAILY_DRAWDOWN',
+      `Daily loss limit breached: ₹${currentLoss.toFixed(2)} / ₹${maxLossAllowed.toFixed(2)}`,
+      { currentLoss, maxLossAllowed, todayPnL: systemState.todayPnL }
+    );
+
     await supabase
       .from('safety_events')
       .insert({
         event_type: 'DAILY_LOSS_LIMIT_BREACH',
         severity: 'CRITICAL',
         description: `Daily loss limit breached: ₹${currentLoss.toFixed(2)} / ₹${maxLossAllowed.toFixed(2)}`,
-        action_taken: 'Blocked all trades',
+        action_taken: 'Kill switch activated - all trades blocked',
         created_at: new Date().toISOString(),
       });
 
     return {
       passed: false,
-      reason: 'Daily loss limit breached',
-      actionTaken: 'BLOCKED_TRADE',
+      reason: 'Daily loss limit breached - Kill Switch activated',
+      actionTaken: 'KILL_SWITCH_ACTIVATED',
     };
   }
 
@@ -380,10 +406,17 @@ async function checkTradeAllowed(supabase: any, systemState: any, riskLimits: an
   }
 
   if (systemState.consecutiveLosses >= riskLimits.consecutiveLossThrottle) {
+    await autoTriggerKillSwitch(
+      supabase,
+      'CONSECUTIVE_LOSSES',
+      `${systemState.consecutiveLosses} consecutive losses detected`,
+      { consecutiveLosses: systemState.consecutiveLosses, threshold: riskLimits.consecutiveLossThrottle }
+    );
+
     return {
       passed: false,
-      reason: `Consecutive loss throttle active: ${systemState.consecutiveLosses} losses`,
-      actionTaken: 'THROTTLED_TRADING',
+      reason: `Consecutive loss threshold breached - Kill Switch activated`,
+      actionTaken: 'KILL_SWITCH_ACTIVATED',
     };
   }
 
@@ -625,4 +658,79 @@ async function executeTrade(
     .eq('id', radar.id);
 
   return tradeData?.id || 'unknown';
+}
+
+async function checkKillSwitch(supabase: any): Promise<{ active: boolean; reason?: string }> {
+  try {
+    const { data } = await supabase
+      .from('kill_switch_state')
+      .select('is_active, reason')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data && data.is_active) {
+      return {
+        active: true,
+        reason: data.reason || 'Kill switch is active',
+      };
+    }
+
+    return { active: false };
+  } catch (error) {
+    console.error('Error checking kill switch:', error);
+    return {
+      active: true,
+      reason: 'Error checking kill switch - defaulting to SAFE mode',
+    };
+  }
+}
+
+async function autoTriggerKillSwitch(
+  supabase: any,
+  triggerType: string,
+  reason: string,
+  metadata: any = {}
+): Promise<void> {
+  try {
+    const timestamp = new Date().toISOString();
+
+    await supabase
+      .from('kill_switch_state')
+      .insert({
+        is_active: true,
+        activated_by: triggerType,
+        activated_at: timestamp,
+        reason,
+        metadata,
+        created_at: timestamp,
+        updated_at: timestamp,
+      });
+
+    await supabase
+      .from('system_config')
+      .update({
+        config_value: {
+          active: true,
+          reason,
+          timestamp,
+          trigger: triggerType,
+        },
+      })
+      .eq('config_key', 'kill_switch_status');
+
+    await supabase
+      .from('safety_events')
+      .insert({
+        event_type: 'AUTO_KILL_SWITCH_TRIGGERED',
+        severity: 'CRITICAL',
+        description: `${triggerType}: ${reason}`,
+        action_taken: 'All trading stopped automatically',
+        created_at: timestamp,
+      });
+
+    console.error(`🚨 AUTO KILL SWITCH TRIGGERED: ${triggerType} - ${reason}`);
+  } catch (error) {
+    console.error('Error auto-triggering kill switch:', error);
+  }
 }

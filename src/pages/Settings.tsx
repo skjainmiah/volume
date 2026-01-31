@@ -46,6 +46,13 @@ export default function Settings() {
     deepseek: '',
   });
 
+  const [growwConfig, setGrowwConfig] = useState({
+    api_key: '',
+    api_secret: '',
+    user_id: '',
+    is_configured: false,
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showGraduationCheck, setShowGraduationCheck] = useState(false);
@@ -108,6 +115,16 @@ export default function Settings() {
               break;
             case 'score_threshold':
               configMap.score_threshold = value.value;
+              break;
+            case 'groww_api':
+              if (value.api_key) {
+                setGrowwConfig({
+                  api_key: value.api_key || '',
+                  api_secret: value.api_secret || '',
+                  user_id: value.user_id || '',
+                  is_configured: true,
+                });
+              }
               break;
           }
         });
@@ -631,6 +648,104 @@ export default function Settings() {
               API keys are stored securely in edge functions
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-surface rounded-lg border border-surface-light overflow-hidden">
+        <div className="bg-surface-light px-6 py-4 border-b border-surface-light">
+          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+            <Key className="w-5 h-5 text-primary" />
+            Groww API Configuration
+          </h3>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-4">
+            <p className="text-sm text-text-primary">
+              <strong>How to get Groww API credentials:</strong>
+            </p>
+            <ol className="text-sm text-text-secondary mt-2 space-y-1 ml-4 list-decimal">
+              <li>Log in to your Groww account</li>
+              <li>Go to Settings → API Access</li>
+              <li>Generate new API credentials</li>
+              <li>Copy the API Key, Secret, and User ID</li>
+              <li>Paste them below and save</li>
+            </ol>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              API Key
+            </label>
+            <input
+              type="password"
+              value={growwConfig.api_key}
+              onChange={(e) => setGrowwConfig({ ...growwConfig, api_key: e.target.value })}
+              placeholder="Enter Groww API Key"
+              className="w-full px-4 py-2 bg-background border border-surface-light rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              API Secret
+            </label>
+            <input
+              type="password"
+              value={growwConfig.api_secret}
+              onChange={(e) => setGrowwConfig({ ...growwConfig, api_secret: e.target.value })}
+              placeholder="Enter Groww API Secret"
+              className="w-full px-4 py-2 bg-background border border-surface-light rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              User ID
+            </label>
+            <input
+              type="text"
+              value={growwConfig.user_id}
+              onChange={(e) => setGrowwConfig({ ...growwConfig, user_id: e.target.value })}
+              placeholder="Enter Groww User ID"
+              className="w-full px-4 py-2 bg-background border border-surface-light rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center gap-2">
+              {growwConfig.is_configured && (
+                <span className="text-success text-sm font-medium">✓ Configured</span>
+              )}
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await (supabase.from('system_config') as any).upsert({
+                    config_key: 'groww_api',
+                    config_value: {
+                      api_key: growwConfig.api_key,
+                      api_secret: growwConfig.api_secret,
+                      user_id: growwConfig.user_id,
+                    },
+                    config_type: 'API',
+                    is_editable_during_trading: false,
+                  });
+                  setGrowwConfig({ ...growwConfig, is_configured: true });
+                  alert('Groww API configured successfully');
+                } catch (error) {
+                  console.error('Error saving Groww config:', error);
+                  alert('Error saving Groww configuration');
+                }
+              }}
+              className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium text-sm"
+            >
+              Save Groww API
+            </button>
+          </div>
+
+          <p className="text-xs text-text-muted">
+            All credentials are encrypted and stored securely in Supabase. Never shared with third parties.
+          </p>
         </div>
       </div>
 

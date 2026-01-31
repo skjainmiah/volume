@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, Eye } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, Search } from 'lucide-react';
 import clsx from 'clsx';
 
 interface RadarItem {
@@ -18,6 +18,7 @@ interface RadarItem {
 export default function Radar() {
   const [radarItems, setRadarItems] = useState<RadarItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,15 +29,7 @@ export default function Radar() {
     try {
       const { data, error } = await supabase
         .from('radar')
-        .select(`
-          id,
-          shock_date,
-          shock_direction,
-          shock_volume_multiple,
-          current_state,
-          days_since_shock,
-          stocks (symbol)
-        `)
+        .select('*')
         .eq('is_active', true)
         .order('shock_date', { ascending: false });
 
@@ -44,7 +37,7 @@ export default function Radar() {
 
       const formattedData = data?.map((item: any) => ({
         id: item.id,
-        stock_symbol: item.stocks?.symbol || 'N/A',
+        stock_symbol: item.stock_symbol,
         shock_date: item.shock_date,
         shock_direction: item.shock_direction,
         shock_volume_multiple: item.shock_volume_multiple,
@@ -57,6 +50,36 @@ export default function Radar() {
       console.error('Error loading radar data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runScanEngine = async () => {
+    setIsScanning(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-engine`;
+      const headers = {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`Scan completed!\n\nScanned: ${result.message}\nShock candles detected: ${result.shockCandlesDetected}`);
+        await loadRadarData();
+      } else {
+        alert(`Scan engine: ${result.message || result.error}`);
+      }
+    } catch (error) {
+      console.error('Error running scan engine:', error);
+      alert('Error running scan engine. Check console for details.');
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -73,9 +96,19 @@ export default function Radar() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-text-primary mb-2">Radar</h1>
-        <p className="text-text-secondary">Stocks being tracked by the system</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-text-primary mb-2">Radar</h1>
+          <p className="text-text-secondary">Stocks being tracked by the system</p>
+        </div>
+        <button
+          onClick={runScanEngine}
+          disabled={isScanning}
+          className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Search className="w-5 h-5" />
+          {isScanning ? 'Scanning...' : 'Fetch & Scan'}
+        </button>
       </div>
 
       {radarItems.length === 0 ? (
