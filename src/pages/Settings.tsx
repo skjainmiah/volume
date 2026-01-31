@@ -749,6 +749,85 @@ export default function Settings() {
         </div>
       </div>
 
+      <div className="bg-surface rounded-lg border border-surface-light overflow-hidden">
+        <div className="bg-surface-light px-6 py-4 border-b border-surface-light">
+          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
+            <SettingsIcon className="w-5 h-5 text-primary" />
+            System Diagnostics
+          </h3>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-text-muted mb-1">Supabase URL</p>
+              <p className="text-xs font-mono text-text-primary bg-background px-3 py-2 rounded border border-surface-light break-all">
+                {import.meta.env.VITE_SUPABASE_URL || '❌ NOT SET'}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-text-muted mb-1">Anon Key</p>
+              <p className="text-xs font-mono text-text-primary bg-background px-3 py-2 rounded border border-surface-light break-all">
+                {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ SET' : '❌ NOT SET'}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-text-muted mb-1">OpenAI API Key</p>
+              <p className="text-xs font-mono text-text-primary bg-background px-3 py-2 rounded border border-surface-light">
+                {import.meta.env.VITE_OPENAI_API_KEY ? '✅ SET' : '❌ NOT SET'}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-text-muted mb-1">Database Connection</p>
+              <p className="text-xs font-mono text-text-primary bg-background px-3 py-2 rounded border border-surface-light">
+                {supabase ? '✅ CONNECTED' : '❌ NOT CONNECTED'}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-surface-light">
+            <button
+              onClick={async () => {
+                try {
+                  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/groww-data-fetcher`;
+                  console.log('Testing API connection to:', apiUrl);
+
+                  const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      action: 'fetch_stocks_with_options',
+                    }),
+                  });
+
+                  console.log('Response status:', response.status);
+                  const result = await response.json();
+                  console.log('Response data:', result);
+
+                  if (response.ok && result.success) {
+                    alert(`✅ API Connection Successful!\n\n${result.message}\n\nCheck the console for details.`);
+                  } else {
+                    alert(`⚠️ API Response:\n\nStatus: ${response.status}\nError: ${result.error || 'Unknown error'}\n\nCheck the console for details.`);
+                  }
+                } catch (error: any) {
+                  console.error('Connection test failed:', error);
+                  alert(`❌ Connection Test Failed\n\n${error.message}\n\nCheck the console for details.`);
+                }
+              }}
+              className="w-full px-4 py-3 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium"
+            >
+              Test API Connection
+            </button>
+          </div>
+
+          <p className="text-xs text-text-muted">
+            Use this diagnostic tool to verify your API configuration. Check browser console for detailed logs.
+          </p>
+        </div>
+      </div>
+
       <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
         <div className="text-sm">

@@ -58,6 +58,9 @@ export default function Radar() {
     setIsFetchingStocks(true);
     try {
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/groww-data-fetcher`;
+
+      console.log('Fetching stocks from:', apiUrl);
+
       const headers = {
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json',
@@ -71,16 +74,27 @@ export default function Radar() {
         }),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        alert(`API Error (${response.status}):\n${errorText}`);
+        return;
+      }
+
       const result = await response.json();
+      console.log('API Result:', result);
 
       if (result.success) {
         alert(`Stocks fetched successfully!\n\n${result.message}`);
       } else {
-        alert(`Error: ${result.error}`);
+        alert(`Error: ${result.error || 'Unknown error'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching stocks:', error);
-      alert('Error fetching stocks. Check console for details.');
+      alert(`Error fetching stocks:\n${error.message}\n\nCheck console for details.`);
     } finally {
       setIsFetchingStocks(false);
     }
@@ -129,6 +143,15 @@ export default function Radar() {
 
   return (
     <div className="space-y-6">
+      {!import.meta.env.VITE_SUPABASE_URL && (
+        <div className="bg-danger/10 border border-danger rounded-lg p-4">
+          <p className="text-danger font-semibold">⚠️ Configuration Error</p>
+          <p className="text-text-secondary text-sm mt-1">
+            VITE_SUPABASE_URL is not set. Check your .env file.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-text-primary mb-2">Radar</h1>
